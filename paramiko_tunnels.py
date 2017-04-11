@@ -1,8 +1,13 @@
 import paramiko
-import SocketServer
+import socketserver
 import socket
 import select
 import threading
+
+import logging
+logger = logging.getLogger('paramiko_tunnels')
+#TODO change print to log
+
 
 class SSHConnection(object):
     """
@@ -46,7 +51,7 @@ class SSHConnection(object):
 
         # this is a little convoluted - it give the handler the info it needs
         # to create channel the SSH transport and forward packets to it.
-        # SocketServer doesn't give Handlers any way to access the outer
+        # socketserver doesn't give Handlers any way to access the outer
         # server normally, so we can't just set the port and transport values
         # when we create the server - it has to eb part of the handler class.
         class SubHandler (ForwardHandler):
@@ -71,7 +76,6 @@ class SSHConnection(object):
             thread.shutdown()
             thread.join()
 
-
     def shutdown_tunnel(self, address):
         """
         Shutdown a specific tunnel
@@ -82,7 +86,6 @@ class SSHConnection(object):
         thread = self.forward_server_threads[address]
         thread.shutdown()
         thread.join()
-
 
     @staticmethod
     def _get_available_local_port():
@@ -103,11 +106,13 @@ class SSHConnection(object):
 
         return port
 
-class ForwardServer(SocketServer.ThreadingTCPServer):
+
+class ForwardServer(socketserver.ThreadingTCPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-class ForwardHandler(SocketServer.BaseRequestHandler):
+
+class ForwardHandler(socketserver.BaseRequestHandler):
 
     def handle(self):
         chan = self.ssh_transport.open_channel(
@@ -115,8 +120,11 @@ class ForwardHandler(SocketServer.BaseRequestHandler):
             (self.chain_host, self.chain_port),
             self.request.getpeername())
 
-        print('Connected!  Tunnel open %r -> %r -> %r' % (self.request.getpeername(),
-                                                            chan.getpeername(), (self.chain_host, self.chain_port)))
+        print('Connected!  Tunnel open {} -> {} -> {}'.format(
+            self.request.getpeername(),
+            chan.getpeername(),
+            (self.chain_host, self.chain_port)))
+
         while True:
             r, w, x = select.select([self.request, chan], [], [])
             if self.request in r:
@@ -135,6 +143,7 @@ class ForwardHandler(SocketServer.BaseRequestHandler):
         self.request.close()
         print('Tunnel closed from %r' % (peername,))
 
+
 class ServerThread(threading.Thread):
 
     def __init__(self, server):
@@ -145,7 +154,5 @@ class ServerThread(threading.Thread):
         self.server.serve_forever()
 
     def shutdown(self):
-        print 'shutting down server'
+        print('shutting down server')
         self.server.shutdown()
-
-
